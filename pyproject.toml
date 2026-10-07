@@ -1,0 +1,15 @@
+[project]
+name = "migration-kit"
+version = "0.1.0"
+description = "Governed, repeatable migration of client data into Microsoft Fabric"
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2", "pyyaml"]
+
+[project.optional-dependencies]
+azure = ["azure-identity", "azure-keyvault-secrets"]
+otel = ["opentelemetry-api", "opentelemetry-sdk"]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

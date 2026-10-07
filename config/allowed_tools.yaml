@@ -1,0 +1,25 @@
+# Default deny. An agent may call only what is listed here, with parameters that
+# satisfy the rules. Unlisted agent, tool or parameter is refused and audited.
+# Rules per parameter: allowed_values, min, max, pattern (full match),
+# forbidden_patterns (search, case-insensitive), required.
+
+agents:
+  author_agent:
+    read_metadata:
+      params:
+        schema: {allowed_values: [dbo], required: true}
+        object_type: {allowed_values: [table, column, key, index]}
+    read_stats:
+      params:
+        table: {pattern: '[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)?', required: true}
+        stat: {allowed_values: [row_count, null_rate, distinct_count, min_max]}
+    propose_spec: {}          # returns a typed AuthorSpec; nothing is written
+
+  operate_agent:              # read-only triage
+    read_run_log:
+      params:
+        run_id: {pattern: '[A-Za-z0-9-]+', required: true}
+    read_dq_violations:
+      params:
+        run_id: {pattern: '[A-Za-z0-9-]+', required: true}
+    propose_fix: {}           # opens a draft PR; a human merges

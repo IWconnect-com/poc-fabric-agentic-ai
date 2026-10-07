@@ -1,0 +1,30 @@
+version: 1
+
+# The five governance pillars as enforceable values. Change here, review in a PR.
+
+policies:                          # what AI may and may not do
+  agents_read_row_values: false    # agents see metadata and aggregate stats only
+  agents_write_environments: [dev, test]   # prod is written only by the CI identity
+  max_tables_per_spec: 200
+
+approvals:                         # when a human must decide
+  auto_approve_min_confidence: 0.85
+  human_review_min_confidence: 0.65        # below this: reject
+  always_human: [spec_merge, prod_deploy]
+
+guardrails:                        # boundaries enforced in code
+  screen_input: true
+  screen_output: true
+  pii_detection_before_model: true
+  max_agent_iterations: 8
+  agent_timeout_seconds: 120
+  max_tokens_per_run: 50000
+
+evaluation:                        # how behaviour is tested
+  min_pass_rate: 0.95
+  rerun_on: [model_change, prompt_change, tool_change]
+  schedule: weekly
+
+oversight:                         # what is watched and alerted on
+  alert_on: [tool_denied, reconciliation_mismatch, approval_required, cost_over_budget]
+  audit_fields: [ts, run_id, agent, identity, action, target, result, reason]

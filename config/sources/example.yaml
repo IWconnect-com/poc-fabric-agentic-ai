@@ -1,0 +1,33 @@
+# Example registry entries (illustrative table names). The real list is proposed by the
+# author step, reviewed in a PR, and merged by a human.
+sources:
+  - source_id: dbo_customers
+    source_schema: dbo
+    source_table: customers
+    target_table: dbo_customers
+    load_strategy: incremental_hash          # no trustworthy modified date
+    business_key: [customer_id]
+    columns: [customer_id, name, country, segment]
+    load_order: 10
+
+  - source_id: dbo_orders
+    source_schema: dbo
+    source_table: orders
+    target_table: dbo_orders
+    load_strategy: incremental_watermark
+    business_key: [order_id]
+    columns: [order_id, customer_id, order_date, amount, modified_at]
+    watermark_column: modified_at
+    lookback_hours: 48                       # ERP updates arrive late
+    partition_column: order_date
+    measure_columns: [amount]
+    load_order: 20
+
+  - source_id: dbo_countries
+    source_schema: dbo
+    source_table: countries
+    target_table: dbo_countries
+    load_strategy: full                      # tiny reference table
+    business_key: [country_code]
+    columns: [country_code, country_name]
+    load_order: 5
