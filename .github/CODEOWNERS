@@ -1,0 +1,5 @@
+# TODO: replace with real team handles before the first PR
+/config/policies.yaml     @TODO-owner
+/config/allowed_tools.yaml @TODO-owner
+/docs/DECISIONS.md        @TODO-owner
+/infra/                   @TODO-owner

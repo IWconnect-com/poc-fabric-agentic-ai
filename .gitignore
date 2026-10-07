@@ -1,0 +1,11 @@
+.env
+.env.*
+*.pem
+*.pfx
+*.key
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv/
+.dataprojects/
+*.zip
