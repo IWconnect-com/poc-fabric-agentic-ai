@@ -8,7 +8,7 @@ Change only by PR with a CODEOWNER review. Superseded decisions stay, marked as 
 | 2 | Silver and gold as Materialized Lake Views (SQL); notebooks only as fallback | Declarative, lineage, DQ constraints, in Git |
 | 3 | Agent proposes, code disposes: LLM output is a typed object validated before use | Only ambiguous judgement is probabilistic |
 | 4 | Agents see metadata and aggregate stats only, enforced by DB permissions (VIEW DEFINITION, no SELECT) | PII, client trust, prompt-injection surface |
-| 5 | Registry is YAML in Git (source of truth); the runtime control table in Azure SQL is seeded from it | Reviewable, versioned; pipeline Lookup needs a runtime table |
+| 5 | Registry is YAML in Git (source of truth); the runtime control table (`meta.pipeline_config` in Fabric SQL database `sqldb_control`, never in a source database) is seeded from it | Reviewable, versioned; pipeline Lookup needs a runtime table |
 | 6 | Incremental by watermark with lookback; hash diff where no trustworthy modified column | Late updates re-read; merge idempotent |
 | 7 | Watermark advances only after extract, land, merge, reconcile succeed | A failed run is simply re-run |
 | 8 | Bronze append-only; silver latest-per-key; deletes are soft | Auditable, no data loss |
