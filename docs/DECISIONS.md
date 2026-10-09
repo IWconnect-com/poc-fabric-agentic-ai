@@ -20,6 +20,8 @@ Change only by PR with a CODEOWNER review. Superseded decisions stay, marked as 
 | 14 | Build the agent with Microsoft Agent Framework (GA at Build 2026); Foundry hosted agents and Osmos are preview: optional, not promised to clients | Do not sell preview features as production |
 | 15 | Infra: Terraform + fabric-cicd; per-environment values in Variable Libraries; provisioning is code (plan/apply), never an agent | Repeatable, reviewable, least privilege |
 | 16 | Fresh repo; prototype engine (incremental run engine, ports, state) kept only as an archive/reference | Fabric does the data movement; engine was unproven |
+| 17 | One lakehouse (`lh_data`) with `bronze`/`silver`/`gold` schemas; the layer is a fixed value in each pipeline, never a config column; `target_table` is the bare name (`bronze.party`). Split lakehouses per layer only if security or ownership requires | Same name across layers, fewer items, lineage readable |
+| 18 | Copy to bronze uses Overwrite for `load_strategy='full'` (Append duplicated every row on rerun); incremental tables must never overwrite. Pipeline must fail on source-vs-bronze count mismatch | Found in the first run |
 
 ## Known limits
 - Updates older than the lookback are missed by watermark; mitigate with scheduled full reconciliation (later).
