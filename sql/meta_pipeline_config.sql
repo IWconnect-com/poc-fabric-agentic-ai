@@ -2,6 +2,7 @@
 -- Lives in the Fabric SQL database `sqldb_control` (NOT in a source database).
 -- Re-runnable: creates the table only if missing, seeds only if empty.
 -- target_table is the bare table name; the layer is the schema (bronze.party), set in the pipeline.
+-- For blob rows: source_schema = blob container name, table_name = file name (with extension).
 -- Existing environment: UPDATE meta.pipeline_config SET target_table = LOWER(table_name);
 -- To upgrade an older version: DROP TABLE meta.pipeline_config; then run this script.
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'meta')
@@ -26,15 +27,16 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM meta.pipeline_config)
 INSERT INTO meta.pipeline_config
-    (id, source_schema, table_name, target_table, load_order, description)
+    (id, source_type, source_schema, table_name, target_table, load_order, description)
 VALUES
-    (1, 'dbo', 'Party',      'party',      10, 'Individuals and organisations'),
-    (2, 'dbo', 'Person',     'person',     20, 'Natural-person details linked to Party'),
-    (3, 'dbo', 'Vehicle',    'vehicle',    30, 'Insured vehicles'),
-    (4, 'dbo', 'Policy',     'policy',     40, 'Insurance policy master records'),
-    (5, 'dbo', 'Coverage',   'coverage',   50, 'Coverage lines attached to a policy'),
-    (6, 'dbo', 'Occurrence', 'occurrence', 60, 'Loss occurrence / event records'),
-    (7, 'dbo', 'Claim',      'claim',      70, 'Claims filed against a policy');
+    (1, 'sql',  'dbo',                'Party',                          'party',           10, 'Individuals and organisations'),
+    (2, 'sql',  'dbo',                'Person',                         'person',          20, 'Natural-person details linked to Party'),
+    (3, 'sql',  'dbo',                'Vehicle',                        'vehicle',         30, 'Insured vehicles'),
+    (4, 'sql',  'dbo',                'Policy',                         'policy',          40, 'Insurance policy master records'),
+    (5, 'sql',  'dbo',                'Coverage',                       'coverage',        50, 'Coverage lines attached to a policy'),
+    (6, 'sql',  'dbo',                'Occurrence',                     'occurrence',      60, 'Loss occurrence / event records'),
+    (7, 'sql',  'dbo',                'Claim',                          'claim',           70, 'Claims filed against a policy'),
+    (8, 'blob', 'blob-landing-files', 'IWInsurance_peril_code_map.csv', 'peril_code_map',  80, 'Peril code lookup from blob CSV');
 GO
 
 SELECT * FROM meta.pipeline_config ORDER BY load_order;
