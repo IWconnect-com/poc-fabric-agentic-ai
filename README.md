@@ -27,7 +27,13 @@ These items were built by hand in the DEV workspace and are **not in Git yet** (
 - Fabric SQL database `sqldb_control`, table `meta.pipeline_config`: the list of tables to load. A person owns it. Seed script: `sql/meta_pipeline_config.sql`.
 - Lakehouse `lh_data` with schemas `bronze`, `silver`, `gold`. The layer is the schema (`bronze.party`), never part of the table name.
 - Pipeline: Lookup (reads the config) -> ForEach -> Copy from Azure SQL into `bronze`. Full loads use **Overwrite** (Append duplicated every row on rerun).
-- Check after every run: row counts in bronze equal the source. Verified for all 7 tables.
+- Check inside the pipeline: after each Copy, a Lookup counts the source table and an If condition compares it with the rows Copy reports. A mismatch fails the run with `COUNT_MISMATCH` and the table name. Tested with a forced failure.
+- Verified by hand for all 7 tables: bronze counts equal the source.
+
+Fabric pipeline gotchas (learned the hard way):
+- Enter dynamic expressions through the **Add dynamic content** pane opened from that field. Typing `@...` into a plain text box sends the text to SQL literally.
+- `item()` only exists at run time. **Preview data** and **Import schemas** on activities that use it show an "additional expressions" prompt. Do not import a schema into the Copy: keep **Mapping** empty so each table maps itself.
+- Test a check by making it fail on purpose, then restore it.
 
 ## How we work
 Never change `main` directly. For every change:
@@ -48,7 +54,7 @@ Also:
 | Rules, policies, guard, audit, secrets, typed models | tests pass |
 | Reconciliation, SQL generation | tests pass; **not yet run on real systems** |
 | Control table + bronze pipeline (7 Azure SQL tables, full load) | **works in DEV, counts verified; built by hand, not in Git yet** |
-| Count-mismatch check inside the pipeline | not started |
+| Count-mismatch check inside the pipeline (source count vs rows copied) | **works in DEV, failure path tested**; independent count of the bronze table not started |
 | Blob CSV source, silver, gold | not started |
 | Foundry agent (front door) | not started |
 | Terraform / fabric-cicd, Git integration of Fabric items | not started |

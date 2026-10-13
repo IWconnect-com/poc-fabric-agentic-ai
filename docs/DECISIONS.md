@@ -22,6 +22,7 @@ Change only by PR with a CODEOWNER review. Superseded decisions stay, marked as 
 | 16 | Fresh repo; prototype engine (incremental run engine, ports, state) kept only as an archive/reference | Fabric does the data movement; engine was unproven |
 | 17 | One lakehouse (`lh_data`) with `bronze`/`silver`/`gold` schemas; the layer is a fixed value in each pipeline, never a config column; `target_table` is the bare name (`bronze.party`). Split lakehouses per layer only if security or ownership requires | Same name across layers, fewer items, lineage readable |
 | 18 | Copy to bronze uses Overwrite for `load_strategy='full'` (Append duplicated every row on rerun); incremental tables must never overwrite. Pipeline must fail on source-vs-bronze count mismatch | Found in the first run |
+| 19 | Count check: Lookup counts the source table after Copy, an If condition compares it with Copy's `rowsCopied`, the Fail activity stops the run. Mapping stays empty. Stronger check (notebook counting the bronze table, measure sums) comes later | Cheap and reliable now; counting through the SQL endpoint right after a write can lag |
 
 ## Known limits
 - Updates older than the lookback are missed by watermark; mitigate with scheduled full reconciliation (later).
@@ -30,3 +31,5 @@ Change only by PR with a CODEOWNER review. Superseded decisions stay, marked as 
 - Watermark values assumed UTC.
 - Spark MERGE (named params, qualified names) and T-SQL queries are unverified on real systems.
 - Terraform provider coverage and Foundry/Osmos preview status must be re-checked before client commitments.
+- Version control for Fabric items is undecided: Fabric Git integration supports Azure DevOps and GitHub (GitLab: verify), the team uses GitLab for dev, and tenant settings need an admin. Until decided, Fabric items are not in Git.
+- The count check trusts the number Copy reports. A source that changes during the run can cause a false mismatch.
