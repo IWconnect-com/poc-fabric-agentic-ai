@@ -24,6 +24,7 @@ Change only by PR with a CODEOWNER review. Superseded decisions stay, marked as 
 | 18 | Copy to bronze uses Overwrite for `load_strategy='full'` (Append duplicated every row on rerun); incremental tables must never overwrite. Pipeline must fail on source-vs-bronze count mismatch | Found in the first run |
 | 19 | Count check: Lookup counts the source table after Copy, an If condition compares it with Copy's `rowsCopied`, the Fail activity stops the run. Mapping stays empty. Stronger check (notebook counting the bronze table, measure sums) comes later | Cheap and reliable now; counting through the SQL endpoint right after a write can lag |
 | 20 | Blob/CSV ingestion via Switch on `source_type` inside ForEach. `source_schema` = container name for blob rows. Count check skipped for blob (file is small, static); stronger check later | One pipeline handles all source types; config drives the routing |
+| 21 | Count validation uses a single THROW-based Lookup instead of Lookup → If → Fail, because Fabric does not allow control-flow activities (If, Switch, ForEach) nested inside a Switch case or another If branch | Discovered during wiring; simpler and fewer activities |
 
 ## Known limits
 - Updates older than the lookback are missed by watermark; mitigate with scheduled full reconciliation (later).
