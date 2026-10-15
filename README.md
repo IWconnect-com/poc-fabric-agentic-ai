@@ -29,15 +29,16 @@ These items were built by hand in the DEV workspace and are **not in Git yet** (
 - Pipeline: Lookup (reads the config) -> ForEach -> Copy from Azure SQL into `bronze`. Full loads use **Overwrite** (Append duplicated every row on rerun).
 - Check inside the pipeline: after each Copy, a Lookup counts the source table and an If condition compares it with the rows Copy reports. A mismatch fails the run with `COUNT_MISMATCH` and the table name. Tested with a forced failure.
 - Verified by hand for all 7 tables: bronze counts equal the source.
-- Lineage columns on bronze (**to be added by hand, not yet done**): in **both** Copy activities (sql and blob Switch cases) -> **Source** -> **Additional columns** -> **+ New**, values via **Add dynamic content**. Names must be exactly these (silver reads them):
+- Lineage columns on bronze (added by hand, **works in DEV** 2026-10-15): in **both** Copy activities (sql and blob Switch cases) -> **Source** -> **Additional columns** -> **+ New**, values via **Add dynamic content**. Names must be exactly these (silver reads them):
 
   | Name | Value (sql case) | Value (blob case) |
   |---|---|---|
-  | `_ingested_at` | `@utcNow()` | `@utcNow()` |
+  | `_ingested_at` | `@utcNow('yyyy-MM-dd HH:mm:ss.ffffff')` | same |
   | `_pipeline_run_id` | `@pipeline().RunId` | `@pipeline().RunId` |
   | `_source` | `@concat(item().source_schema, '.', item().table_name)` | `@concat(item().source_schema, '/', item().table_name)` |
 
-  Silver carries them through and adds `_silver_run_id` and `_processed_at`. Gold does not carry them (clean model for reports).
+  **Name** is plain text; only **Value** is dynamic content. `_ingested_at` uses an explicit format because plain `utcNow()` has 7 decimal places and Spark timestamps hold 6. Silver carries the columns through and adds `_silver_run_id` and `_processed_at`. Gold does not carry them (clean model for reports).
+- Clean-start test (2026-10-15): all bronze/silver/gold tables dropped (except `gold._run_log`), then pipeline -> silver -> gold rebuilt everything with the same counts, no manual fixes. A second pipeline + silver run gave the same bronze counts: the Copy overwrites, it does not append.
 
 Fabric pipeline gotchas (learned the hard way):
 - Enter dynamic expressions through the **Add dynamic content** pane opened from that field. Typing `@...` into a plain text box sends the text to SQL literally.
@@ -62,10 +63,10 @@ Also:
 |---|---|
 | Rules, policies, guard, audit, secrets, typed models | tests pass |
 | Reconciliation, SQL generation | tests pass; **not yet run on real systems** |
-| Control table + bronze pipeline (7 Azure SQL tables, full load) | **works in DEV, counts verified; built by hand, not in Git yet** |
+| Control table + bronze pipeline (7 Azure SQL tables, full load) | **works in DEV, counts verified; rebuilt from empty tables 2026-10-15; reruns overwrite (verified); built by hand, not in Git yet** |
 | Count-mismatch check inside the pipeline (source count vs rows copied) | **works in DEV, failure path tested**; independent count of the bronze table not started |
 | Blob CSV source | **works in DEV** — Switch routes sql/blob, peril_code_map in bronze |
-| Silver layer (notebook) | **works in DEV** — 8 silver tables verified. Data checks (null key FAIL; duplicate keys, values NULLed by casts WARN) and short error messages **run in DEV 2026-10-15**: 7 SQL tables WARN (source has every row 3x, expected — see DECISIONS known limits), peril_code_map OK, no cast NULLs. Lineage columns (`_silver_run_id`, `_processed_at`, bronze `_*` when present): **not yet run in Fabric** |
+| Silver layer (notebook) | **works in DEV** — 8 silver tables verified. Data checks (null key FAIL; duplicate keys, values NULLed by casts WARN) and short error messages **run in DEV 2026-10-15**: 7 SQL tables WARN (source has every row 3x, expected — see DECISIONS known limits), peril_code_map OK, no cast NULLs. Lineage columns (bronze `_ingested_at`, `_pipeline_run_id`, `_source` + `_silver_run_id`, `_processed_at`): **works in DEV**, all rows filled (checked on `silver.party`) |
 | Gold layer (notebook) | **works in DEV** — 7 dims + fact_claim, 0 failures with key checks (null/duplicate key, row count) on 2026-10-15; failure path of the key check not yet tested in Fabric |
 | Run log (error handling) | notebooks append to `gold._run_log`; DDL for `meta.run_log` in `sqldb_control` ready |
 | Foundry agent (front door) | not started |
