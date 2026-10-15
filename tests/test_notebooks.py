@@ -74,6 +74,38 @@ def test_silver_refuses_incremental_tables():
     assert guard and guard.start() < body.index("write_silver(")
 
 
+def silver_cells():
+    return {
+        m.group(1): m.group(2)
+        for m in re.finditer(r"## CELL \d+ — silver\.(\w+)\n(.*?)(?=\n# =+\n# ## CELL|\Z)", SILVER, re.S)
+    }
+
+
+def test_every_silver_table_carries_bronze_lineage():
+    cells = silver_cells()
+    assert set(cells) == SILVER_TABLES
+    missing = [t for t, body in cells.items() if "*lineage(src)" not in body.split("check_and_write", 1)[0]]
+    assert missing == []
+
+
+def test_lineage_column_names_match_the_pipeline_docs():
+    # the Copy activity's Additional columns are set by hand in Fabric; names must match exactly
+    names = re.search(r"BRONZE_LINEAGE = \[([^\]]*)\]", SILVER).group(1)
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for name in re.findall(r'"(\w+)"', names):
+        assert f"`{name}`" in readme
+
+
+def test_silver_rows_are_stamped_with_the_run_before_the_write():
+    body = function_body(SILVER, "check_and_write")
+    stamp = min(body.index('"_silver_run_id"'), body.index('"_processed_at"'))
+    assert stamp < body.index("write_silver(")
+
+
+def test_lineage_columns_are_not_data_checked():
+    assert 'not c.startswith("_")' in function_body(SILVER, "new_nulls")
+
+
 # ---- error messages (both notebooks) ----
 
 @pytest.mark.parametrize("text", [GOLD, SILVER], ids=["gold", "silver"])

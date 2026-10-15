@@ -25,6 +25,11 @@ results = []  # (table, status, rows_in, rows_out, message)
 # not the full-load overwrite and arbitrary dedupe below.
 INCREMENTAL_TABLES = set()
 
+# Lineage columns the bronze Copy activity adds (Additional columns, set by hand in Fabric;
+# names must match the README). Carried into silver when present, so silver still runs
+# against bronze tables loaded before the columns existed.
+BRONZE_LINEAGE = ["_ingested_at", "_pipeline_run_id", "_source"]
+
 
 def log(table, status, rows_in, rows_out, msg=""):
     results.append((table, status, rows_in, rows_out, msg))
@@ -37,6 +42,16 @@ def short_error(e, limit=500):
     lines = str(e).strip().splitlines()
     text = f"{type(e).__name__}: {lines[0]}" if lines else type(e).__name__
     return text[:limit]
+
+
+def lineage(src):
+    """Bronze lineage columns that exist in `src`, for the cell's select. Copy writes them as text."""
+    cols = []
+    for c in BRONZE_LINEAGE:
+        if c in src.columns:
+            col = F.col(c).cast("timestamp") if c == "_ingested_at" else F.col(c)
+            cols.append(col.alias(c))
+    return cols
 
 
 def safe_to_date(col_name):
@@ -64,8 +79,9 @@ def blank_or_null(col_name):
 
 def new_nulls(src, df, skip, renamed):
     """Per column: how many values were present in bronze but are NULL in silver
-    (failed cast or unrecognised flag). Counts only, never values."""
-    cols = [c for c in df.columns if c not in skip and renamed.get(c, c) in src.columns]
+    (failed cast or unrecognised flag). Counts only, never values. Lineage (_*) columns are skipped."""
+    cols = [c for c in df.columns
+            if c not in skip and not c.startswith("_") and renamed.get(c, c) in src.columns]
     if not cols:
         return {}
     before = src.agg(*[F.count(F.when(blank_or_null(renamed.get(c, c)), 1)).alias(c) for c in cols]).first()
@@ -95,7 +111,9 @@ def check_and_write(df, table_name, rows_in, key_col, src, renamed=None):
     for col_name, n in new_nulls(src, df, {key_col}, renamed).items():
         warns.append(f"{n} value(s) became NULL in {col_name}")
 
-    out = dedupe(df, key_col)
+    out = dedupe(df, key_col) \
+        .withColumn("_silver_run_id", F.lit(run_id)) \
+        .withColumn("_processed_at", F.lit(run_start).cast("timestamp"))
     write_silver(out, table_name)
     log(table_name, "WARN" if warns else "OK", rows_in, out.count(), "; ".join(warns))
 
@@ -143,6 +161,7 @@ try:
         F.col("Begin_Date").cast(DateType()),
         safe_to_date("End_Date"),                      # varchar -> date
         F.trim(F.col("Party_Type_Code")).alias("Party_Type_Code"),
+        *lineage(src),
     )
     check_and_write(df, "party", rows_in, "Party_Identifier", src)
 except Exception as e:
@@ -169,6 +188,7 @@ try:
         F.trim(F.col("Birth_Place_Name")).alias("Birth_Place_Name"),
         F.trim(F.col("Gender_Code")).alias("Gender_Code"),
         F.trim(F.col("Prefix_Name")).alias("Prefix_Name"),
+        *lineage(src),
     )
     check_and_write(df, "person", rows_in, "Person_Identifier", src)
 except Exception as e:
@@ -190,6 +210,7 @@ try:
         F.col("Vehicle_Driving_Wheel_Quantity").cast(IntegerType()),
         F.trim(F.col("Vehicle_Make_Name")).alias("Vehicle_Make_Name"),
         F.upper(F.trim(F.col("Vehicle_Identification_Number"))).alias("Vehicle_Identification_Number"),
+        *lineage(src),
     )
     check_and_write(df, "vehicle", rows_in, "Insurable_Object_Identifier", src)
 except Exception as e:
@@ -211,6 +232,7 @@ try:
         F.trim(F.col("Policy_Number")).alias("Policy_Number"),
         F.trim(F.col("Status_Code")).alias("Status_Code"),
         F.col("Geographic_Location_Identifier").cast("bigint"),
+        *lineage(src),
     )
     check_and_write(df, "policy", rows_in, "Policy_Identifier", src)
 except Exception as e:
@@ -232,6 +254,7 @@ try:
         F.col("Coverage_Type_Identifier").cast("bigint"),
         F.col("Coverage_Group_Identifier").cast("bigint"),
         F.trim(F.col("Coverage_Part_Code")).alias("Coverage_Part_Code"),
+        *lineage(src),
     )
     check_and_write(df, "coverage", rows_in, "Coverage_Identifier", src)
 except Exception as e:
@@ -259,6 +282,7 @@ try:
         F.trim(F.col("Occurrence_Begin_Time")).alias("Occurrence_Begin_Time"),
         F.trim(F.col("Occurrence_End_Time")).alias("Occurrence_End_Time"),
         F.trim(F.col("Occurrence_Name")).alias("Occurrence_Name"),
+        *lineage(src),
     )
     check_and_write(df, "occurrence", rows_in, "Occurrence_Identifier", src,
                     renamed={"Is_Catastrophic_Event": "Catastrophic_Event_Indicator"})
@@ -289,6 +313,7 @@ try:
         F.col("Claim_Reopen_Date").cast(DateType()),
         F.trim(F.col("Claim_Status_Code")).alias("Claim_Status_Code"),
         F.col("Claim_Reported_Date").cast(DateType()),
+        *lineage(src),
     )
     check_and_write(df, "claim", rows_in, "Claim_Identifier", src)
 except Exception as e:
@@ -318,6 +343,7 @@ try:
          .otherwise(None)
          .cast(BooleanType())
          .alias("standard_covered_flag"),
+        *lineage(src),
     )
     check_and_write(df, "peril_code_map", rows_in, "peril_code", src)
 except Exception as e:
