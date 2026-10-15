@@ -25,6 +25,8 @@ Change only by PR with a CODEOWNER review. Superseded decisions stay, marked as 
 | 19 | Count check: Lookup counts the source table after Copy, an If condition compares it with Copy's `rowsCopied`, the Fail activity stops the run. Mapping stays empty. Stronger check (notebook counting the bronze table, measure sums) comes later | Cheap and reliable now; counting through the SQL endpoint right after a write can lag |
 | 20 | Blob/CSV ingestion via Switch on `source_type` inside ForEach. `source_schema` = container name for blob rows. Count check skipped for blob (file is small, static); stronger check later | One pipeline handles all source types; config drives the routing |
 
+| 22 | Silver layer via Spark notebook (not MLVs). One notebook transforms all 8 bronze tables: type-cast, trim, dedupe, write Delta to silver schema. Pipeline calls notebook after ingestion. Supersedes Decision 2 MLV-first preference | Notebooks handle error logging, try/catch per table, conditional logic; MLVs are read-only views with no materialization in Fabric lakehouses |
+
 ## Known limits
 - Updates older than the lookback are missed by watermark; mitigate with scheduled full reconciliation (later).
 - Hard deletes are invisible to a watermark.
