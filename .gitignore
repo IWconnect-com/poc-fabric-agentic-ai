@@ -9,3 +9,4 @@ __pycache__/
 .venv/
 .dataprojects/
 *.zip
+.ipynb_checkpoints/
