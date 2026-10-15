@@ -56,8 +56,9 @@ Also:
 | Control table + bronze pipeline (7 Azure SQL tables, full load) | **works in DEV, counts verified; built by hand, not in Git yet** |
 | Count-mismatch check inside the pipeline (source count vs rows copied) | **works in DEV, failure path tested**; independent count of the bronze table not started |
 | Blob CSV source | **works in DEV** — Switch routes sql/blob, peril_code_map in bronze |
-| Silver layer (notebook) | notebook written, not yet run in Fabric |
-| Gold layer | not started |
+| Silver layer (notebook) | **works in DEV** — 8 silver tables verified |
+| Gold layer (notebook) | notebook written, not yet run in Fabric |
+| Run log (error handling) | notebooks append to `gold._run_log`; DDL for `meta.run_log` in `sqldb_control` ready |
 | Foundry agent (front door) | not started |
 | Terraform / fabric-cicd, Git integration of Fabric items | not started |
 | Semantic model, report | not started |

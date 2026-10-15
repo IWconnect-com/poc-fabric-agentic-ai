@@ -26,6 +26,8 @@ Change only by PR with a CODEOWNER review. Superseded decisions stay, marked as 
 | 20 | Blob/CSV ingestion via Switch on `source_type` inside ForEach. `source_schema` = container name for blob rows. Count check skipped for blob (file is small, static); stronger check later | One pipeline handles all source types; config drives the routing |
 
 | 22 | Silver layer via Spark notebook (not MLVs). One notebook transforms all 8 bronze tables: type-cast, trim, dedupe, write Delta to silver schema. Pipeline calls notebook after ingestion. Supersedes Decision 2 MLV-first preference | Notebooks handle error logging, try/catch per table, conditional logic; MLVs are read-only views with no materialization in Fabric lakehouses |
+| 23 | Gold layer via Spark notebook. Star schema: 7 dimension tables (`dim_party`, `dim_person`, `dim_vehicle`, `dim_policy`, `dim_coverage`, `dim_occurrence`, `dim_peril_code`) + 1 fact table (`fact_claim`). fact_claim joins claim with occurrence and vehicle (left joins), adds derived `days_open` and `is_open`. All columns renamed to snake_case business names | Same pattern as silver; star schema gives clean semantic-model input; denormalized occurrence/vehicle on fact avoids extra joins in reports |
+| 24 | Run log: both notebooks append per-table results (run_id, notebook, table, status, rows_in, rows_out, error_message, timestamp) to `gold._run_log` Delta table. DDL for `sqldb_control.meta.run_log` ready for when JDBC + managed identity is wired. Log write failure is a warning, not a fatal error | Operational visibility without JDBC dependency; migrate to SQL database later |
 
 ## Known limits
 - Updates older than the lookback are missed by watermark; mitigate with scheduled full reconciliation (later).
