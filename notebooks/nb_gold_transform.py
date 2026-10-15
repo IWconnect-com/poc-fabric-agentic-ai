@@ -14,8 +14,10 @@ from datetime import datetime, timezone
 LAKEHOUSE = "lh_data"
 SILVER = "silver"
 GOLD = "gold"
+NOTEBOOK = "gold"
 
 run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+run_start = datetime.now(timezone.utc)
 results = []
 
 
@@ -30,6 +32,35 @@ def write_gold(df, table_name):
         .mode("overwrite") \
         .option("overwriteSchema", "true") \
         .saveAsTable(f"{LAKEHOUSE}.{GOLD}.{table_name}")
+
+
+def write_run_log(results_list):
+    """Append run results to gold._run_log Delta table.
+    Future: write to sqldb_control.meta.run_log via JDBC + managed identity."""
+    from pyspark.sql.types import StructType, StructField, StringType, IntegerType as IT, TimestampType
+
+    ts = datetime.now(timezone.utc)
+    schema = StructType([
+        StructField("run_id", StringType(), False),
+        StructField("notebook", StringType(), False),
+        StructField("table_name", StringType(), False),
+        StructField("status", StringType(), False),
+        StructField("rows_in", IT(), False),
+        StructField("rows_out", IT(), False),
+        StructField("error_message", StringType(), True),
+        StructField("run_ts", TimestampType(), False),
+    ])
+    rows = [
+        (run_id, NOTEBOOK, r[0], r[1], r[2], r[3], r[4] if r[4] else None, ts)
+        for r in results_list
+    ]
+    if rows:
+        log_df = spark.createDataFrame(rows, schema)
+        log_df.write.format("delta") \
+            .mode("append") \
+            .option("mergeSchema", "true") \
+            .saveAsTable(f"{LAKEHOUSE}.gold._run_log")
+        print(f"Run log: {len(rows)} entries appended to gold._run_log")
 
 
 # ============================================================
@@ -271,7 +302,7 @@ except Exception as e:
 
 
 # ============================================================
-# ## CELL 10 — Summary
+# ## CELL 10 — Summary + run log
 # ============================================================
 
 from pyspark.sql import Row
@@ -283,9 +314,16 @@ summary = spark.createDataFrame(
 )
 summary.show(truncate=False)
 
+# Persist run log to Delta (append)
+try:
+    write_run_log(results)
+except Exception as e:
+    print(f"WARNING: Could not write run log: {e}")
+
 failed = [r for r in results if r[1] == "FAIL"]
 if failed:
     tables = ", ".join(r[0] for r in failed)
     raise Exception(f"Gold transform failed for: {tables}")
 
-print(f"Gold transform complete. {len(results)} tables, {len(failed)} failures.")
+elapsed = (datetime.now(timezone.utc) - run_start).total_seconds()
+print(f"Gold transform complete. {len(results)} tables, {len(failed)} failures, {elapsed:.1f}s elapsed.")
