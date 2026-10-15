@@ -9,13 +9,13 @@
 
 from pyspark.sql import functions as F
 from pyspark.sql.types import DateType, IntegerType, BooleanType
-from datetime import datetime
+from datetime import datetime, timezone
 
 LAKEHOUSE = "lh_data"
 BRONZE = "bronze"
 SILVER = "silver"
 
-run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 results = []  # (table, status, rows_in, rows_out, message)
 
 
