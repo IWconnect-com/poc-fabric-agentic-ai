@@ -11,7 +11,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DateType, IntegerType, BooleanType
 from datetime import datetime, timezone
 
-LAKEHOUSE = "lh_data"
+LAKEHOUSE = "lh_poc_fabric_power_bi_dev"
 BRONZE = "bronze"
 SILVER = "silver"
 NOTEBOOK = "silver"
