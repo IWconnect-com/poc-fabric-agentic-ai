@@ -34,6 +34,38 @@ def write_gold(df, table_name):
         .saveAsTable(f"{LAKEHOUSE}.{GOLD}.{table_name}")
 
 
+def key_problems(df, key_cols):
+    """Return a description of null or duplicate keys, or "" if the key is clean."""
+    any_null = F.lit(False)
+    for c in key_cols:
+        any_null = any_null | F.col(c).isNull()
+    nulls = df.filter(any_null).count()
+    dupes = df.count() - df.select(*key_cols).distinct().count()
+    problems = []
+    if nulls:
+        problems.append(f"{nulls} row(s) with null key {key_cols}")
+    if dupes:
+        problems.append(f"{dupes} duplicate key(s) {key_cols}")
+    return "; ".join(problems)
+
+
+def check_and_write(df, table_name, rows_in, key_cols):
+    """Check row count and key, then overwrite the gold table.
+    On a problem the table is logged FAIL and NOT written, so the last good version stays."""
+    rows_out = df.count()
+    problems = []
+    if rows_out != rows_in:
+        problems.append(f"row count changed {rows_in} -> {rows_out}")
+    keys = key_problems(df, key_cols)
+    if keys:
+        problems.append(keys)
+    if problems:
+        log(table_name, "FAIL", rows_in, rows_out, "; ".join(problems))
+        return
+    write_gold(df, table_name)
+    log(table_name, "OK", rows_in, rows_out)
+
+
 def write_run_log(results_list):
     """Append run results to gold._run_log Delta table.
     Future: write to sqldb_control.meta.run_log via JDBC + managed identity."""
@@ -79,8 +111,7 @@ try:
         F.col("Party_Type_Code").alias("party_type"),
     )
 
-    write_gold(df, "dim_party")
-    log("dim_party", "OK", rows_in, df.count())
+    check_and_write(df, "dim_party", rows_in, ["party_id"])
 except Exception as e:
     log("dim_party", "FAIL", 0, 0, str(e))
 
@@ -107,8 +138,7 @@ try:
         F.col("Prefix_Name").alias("prefix"),
     )
 
-    write_gold(df, "dim_person")
-    log("dim_person", "OK", rows_in, df.count())
+    check_and_write(df, "dim_person", rows_in, ["person_id"])
 except Exception as e:
     log("dim_person", "FAIL", 0, 0, str(e))
 
@@ -130,8 +160,7 @@ try:
         F.col("Vehicle_Identification_Number").alias("vin"),
     )
 
-    write_gold(df, "dim_vehicle")
-    log("dim_vehicle", "OK", rows_in, df.count())
+    check_and_write(df, "dim_vehicle", rows_in, ["vehicle_id"])
 except Exception as e:
     log("dim_vehicle", "FAIL", 0, 0, str(e))
 
@@ -153,8 +182,7 @@ try:
         F.col("Geographic_Location_Identifier").alias("location_id"),
     )
 
-    write_gold(df, "dim_policy")
-    log("dim_policy", "OK", rows_in, df.count())
+    check_and_write(df, "dim_policy", rows_in, ["policy_id"])
 except Exception as e:
     log("dim_policy", "FAIL", 0, 0, str(e))
 
@@ -176,8 +204,7 @@ try:
         F.col("Coverage_Part_Code").alias("coverage_part"),
     )
 
-    write_gold(df, "dim_coverage")
-    log("dim_coverage", "OK", rows_in, df.count())
+    check_and_write(df, "dim_coverage", rows_in, ["coverage_id"])
 except Exception as e:
     log("dim_coverage", "FAIL", 0, 0, str(e))
 
@@ -201,8 +228,7 @@ try:
         F.col("Geographic_Location_Identifier").alias("location_id"),
     )
 
-    write_gold(df, "dim_occurrence")
-    log("dim_occurrence", "OK", rows_in, df.count())
+    check_and_write(df, "dim_occurrence", rows_in, ["occurrence_id"])
 except Exception as e:
     log("dim_occurrence", "FAIL", 0, 0, str(e))
 
@@ -224,8 +250,7 @@ try:
         F.col("standard_covered_flag").alias("is_standard_covered"),
     )
 
-    write_gold(df, "dim_peril_code")
-    log("dim_peril_code", "OK", rows_in, df.count())
+    check_and_write(df, "dim_peril_code", rows_in, ["peril_code"])
 except Exception as e:
     log("dim_peril_code", "FAIL", 0, 0, str(e))
 
@@ -295,8 +320,7 @@ try:
             F.col("v.Vehicle_Model_Year").alias("vehicle_year"),
         )
 
-    write_gold(df, "fact_claim")
-    log("fact_claim", "OK", rows_in, df.count())
+    check_and_write(df, "fact_claim", rows_in, ["claim_id"])
 except Exception as e:
     log("fact_claim", "FAIL", 0, 0, str(e))
 
