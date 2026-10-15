@@ -14,7 +14,7 @@ CREATE TABLE meta.run_log (
     run_id          VARCHAR(32)    NOT NULL,
     notebook        VARCHAR(64)    NOT NULL,   -- 'silver' or 'gold'
     table_name      VARCHAR(128)   NOT NULL,
-    status          VARCHAR(8)     NOT NULL,   -- 'OK' or 'FAIL'
+    status          VARCHAR(8)     NOT NULL,   -- 'OK', 'WARN' (silver: written, see message) or 'FAIL'
     rows_in         INT            NOT NULL DEFAULT 0,
     rows_out        INT            NOT NULL DEFAULT 0,
     error_message   VARCHAR(4000)  NULL,
