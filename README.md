@@ -56,7 +56,7 @@ Also:
 | Control table + bronze pipeline (7 Azure SQL tables, full load) | **works in DEV, counts verified; built by hand, not in Git yet** |
 | Count-mismatch check inside the pipeline (source count vs rows copied) | **works in DEV, failure path tested**; independent count of the bronze table not started |
 | Blob CSV source | **works in DEV** — Switch routes sql/blob, peril_code_map in bronze |
-| Silver layer (notebook) | **works in DEV** — 8 silver tables verified |
+| Silver layer (notebook) | **works in DEV** — 8 silver tables verified. Data checks (null key FAIL; duplicate keys, values NULLed by casts WARN) and short error messages **run in DEV 2026-10-15**: 7 SQL tables WARN (source has every row 3x, expected — see DECISIONS known limits), peril_code_map OK, no cast NULLs |
 | Gold layer (notebook) | **works in DEV** — 7 dims + fact_claim, 0 failures with key checks (null/duplicate key, row count) on 2026-10-15; failure path of the key check not yet tested in Fabric |
 | Run log (error handling) | notebooks append to `gold._run_log`; DDL for `meta.run_log` in `sqldb_control` ready |
 | Foundry agent (front door) | not started |

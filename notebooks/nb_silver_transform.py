@@ -20,10 +20,23 @@ run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 run_start = datetime.now(timezone.utc)
 results = []  # (table, status, rows_in, rows_out, message)
 
+# Tables loaded incrementally (bronze append-only, one row per version, Decision 8).
+# None yet. check_and_write refuses them: they need latest-per-key by watermark + MERGE,
+# not the full-load overwrite and arbitrary dedupe below.
+INCREMENTAL_TABLES = set()
+
 
 def log(table, status, rows_in, rows_out, msg=""):
     results.append((table, status, rows_in, rows_out, msg))
     print(f"[{status}] {SILVER}.{table}: {rows_in} -> {rows_out}  {msg}")
+
+
+def short_error(e, limit=500):
+    """Exception type + first line only. Full Spark messages carry stack traces
+    and can quote row values; the run log must hold neither."""
+    lines = str(e).strip().splitlines()
+    text = f"{type(e).__name__}: {lines[0]}" if lines else type(e).__name__
+    return text[:limit]
 
 
 def safe_to_date(col_name):
@@ -32,8 +45,8 @@ def safe_to_date(col_name):
 
 
 def dedupe(df, key_col):
-    """Keep one row per key. Full-load bronze has no duplicates normally,
-    but this guards against double-runs or future incremental appends."""
+    """Keep one row per key; which row is kept is arbitrary. Full loads only:
+    incremental tables need the latest row per key (see INCREMENTAL_TABLES)."""
     return df.dropDuplicates([key_col])
 
 
@@ -43,6 +56,48 @@ def write_silver(df, table_name):
         .mode("overwrite") \
         .option("overwriteSchema", "true") \
         .saveAsTable(f"{LAKEHOUSE}.{SILVER}.{table_name}")
+
+
+def blank_or_null(col_name):
+    return F.col(col_name).isNull() | (F.trim(F.col(col_name).cast("string")) == "")
+
+
+def new_nulls(src, df, skip, renamed):
+    """Per column: how many values were present in bronze but are NULL in silver
+    (failed cast or unrecognised flag). Counts only, never values."""
+    cols = [c for c in df.columns if c not in skip and renamed.get(c, c) in src.columns]
+    if not cols:
+        return {}
+    before = src.agg(*[F.count(F.when(blank_or_null(renamed.get(c, c)), 1)).alias(c) for c in cols]).first()
+    after = df.agg(*[F.count(F.when(F.col(c).isNull(), 1)).alias(c) for c in cols]).first()
+    return {c: after[c] - before[c] for c in cols if after[c] > before[c]}
+
+
+def check_and_write(df, table_name, rows_in, key_col, src, renamed=None):
+    """Check the cleaned `df` (before dedupe) against bronze `src`, dedupe, overwrite silver.
+    Null or uncastable key -> FAIL, table NOT written (last good version stays).
+    Duplicate keys or values turned NULL by a cast -> WARN, table written.
+    `renamed` maps silver column -> bronze column where the name changed."""
+    if table_name in INCREMENTAL_TABLES:
+        raise NotImplementedError(f"{table_name} is incremental: needs latest-per-key + MERGE, not overwrite")
+    renamed = renamed or {}
+
+    null_keys = df.filter(F.col(key_col).isNull()).count()
+    if null_keys:
+        log(table_name, "FAIL", rows_in, 0, f"{null_keys} row(s) with null or uncastable key {key_col}")
+        return
+
+    # Full load: bronze is overwritten each run, so a duplicate key came from the source.
+    warns = []
+    dupes = rows_in - df.select(key_col).distinct().count()
+    if dupes:
+        warns.append(f"{dupes} duplicate key(s) {key_col} dropped")
+    for col_name, n in new_nulls(src, df, {key_col}, renamed).items():
+        warns.append(f"{n} value(s) became NULL in {col_name}")
+
+    out = dedupe(df, key_col)
+    write_silver(out, table_name)
+    log(table_name, "WARN" if warns else "OK", rows_in, out.count(), "; ".join(warns))
 
 
 def write_run_log(results_list):
@@ -89,12 +144,9 @@ try:
         safe_to_date("End_Date"),                      # varchar -> date
         F.trim(F.col("Party_Type_Code")).alias("Party_Type_Code"),
     )
-    df = dedupe(df, "Party_Identifier")
-
-    write_silver(df, "party")
-    log("party", "OK", rows_in, df.count())
+    check_and_write(df, "party", rows_in, "Party_Identifier", src)
 except Exception as e:
-    log("party", "FAIL", 0, 0, str(e))
+    log("party", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -118,12 +170,9 @@ try:
         F.trim(F.col("Gender_Code")).alias("Gender_Code"),
         F.trim(F.col("Prefix_Name")).alias("Prefix_Name"),
     )
-    df = dedupe(df, "Person_Identifier")
-
-    write_silver(df, "person")
-    log("person", "OK", rows_in, df.count())
+    check_and_write(df, "person", rows_in, "Person_Identifier", src)
 except Exception as e:
-    log("person", "FAIL", 0, 0, str(e))
+    log("person", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -142,12 +191,9 @@ try:
         F.trim(F.col("Vehicle_Make_Name")).alias("Vehicle_Make_Name"),
         F.upper(F.trim(F.col("Vehicle_Identification_Number"))).alias("Vehicle_Identification_Number"),
     )
-    df = dedupe(df, "Insurable_Object_Identifier")
-
-    write_silver(df, "vehicle")
-    log("vehicle", "OK", rows_in, df.count())
+    check_and_write(df, "vehicle", rows_in, "Insurable_Object_Identifier", src)
 except Exception as e:
-    log("vehicle", "FAIL", 0, 0, str(e))
+    log("vehicle", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -166,12 +212,9 @@ try:
         F.trim(F.col("Status_Code")).alias("Status_Code"),
         F.col("Geographic_Location_Identifier").cast("bigint"),
     )
-    df = dedupe(df, "Policy_Identifier")
-
-    write_silver(df, "policy")
-    log("policy", "OK", rows_in, df.count())
+    check_and_write(df, "policy", rows_in, "Policy_Identifier", src)
 except Exception as e:
-    log("policy", "FAIL", 0, 0, str(e))
+    log("policy", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -190,12 +233,9 @@ try:
         F.col("Coverage_Group_Identifier").cast("bigint"),
         F.trim(F.col("Coverage_Part_Code")).alias("Coverage_Part_Code"),
     )
-    df = dedupe(df, "Coverage_Identifier")
-
-    write_silver(df, "coverage")
-    log("coverage", "OK", rows_in, df.count())
+    check_and_write(df, "coverage", rows_in, "Coverage_Identifier", src)
 except Exception as e:
-    log("coverage", "FAIL", 0, 0, str(e))
+    log("coverage", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -220,12 +260,10 @@ try:
         F.trim(F.col("Occurrence_End_Time")).alias("Occurrence_End_Time"),
         F.trim(F.col("Occurrence_Name")).alias("Occurrence_Name"),
     )
-    df = dedupe(df, "Occurrence_Identifier")
-
-    write_silver(df, "occurrence")
-    log("occurrence", "OK", rows_in, df.count())
+    check_and_write(df, "occurrence", rows_in, "Occurrence_Identifier", src,
+                    renamed={"Is_Catastrophic_Event": "Catastrophic_Event_Indicator"})
 except Exception as e:
-    log("occurrence", "FAIL", 0, 0, str(e))
+    log("occurrence", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -252,12 +290,9 @@ try:
         F.trim(F.col("Claim_Status_Code")).alias("Claim_Status_Code"),
         F.col("Claim_Reported_Date").cast(DateType()),
     )
-    df = dedupe(df, "Claim_Identifier")
-
-    write_silver(df, "claim")
-    log("claim", "OK", rows_in, df.count())
+    check_and_write(df, "claim", rows_in, "Claim_Identifier", src)
 except Exception as e:
-    log("claim", "FAIL", 0, 0, str(e))
+    log("claim", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -284,12 +319,9 @@ try:
          .cast(BooleanType())
          .alias("standard_covered_flag"),
     )
-    df = dedupe(df, "peril_code")
-
-    write_silver(df, "peril_code_map")
-    log("peril_code_map", "OK", rows_in, df.count())
+    check_and_write(df, "peril_code_map", rows_in, "peril_code", src)
 except Exception as e:
-    log("peril_code_map", "FAIL", 0, 0, str(e))
+    log("peril_code_map", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================

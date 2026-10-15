@@ -26,6 +26,14 @@ def log(table, status, rows_in, rows_out, msg=""):
     print(f"[{status}] {GOLD}.{table}: {rows_in} -> {rows_out}  {msg}")
 
 
+def short_error(e, limit=500):
+    """Exception type + first line only. Full Spark messages carry stack traces
+    and can quote row values; the run log must hold neither."""
+    lines = str(e).strip().splitlines()
+    text = f"{type(e).__name__}: {lines[0]}" if lines else type(e).__name__
+    return text[:limit]
+
+
 def write_gold(df, table_name):
     """Overwrite the gold table as a managed Delta table."""
     df.write.format("delta") \
@@ -113,7 +121,7 @@ try:
 
     check_and_write(df, "dim_party", rows_in, ["party_id"])
 except Exception as e:
-    log("dim_party", "FAIL", 0, 0, str(e))
+    log("dim_party", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -140,7 +148,7 @@ try:
 
     check_and_write(df, "dim_person", rows_in, ["person_id"])
 except Exception as e:
-    log("dim_person", "FAIL", 0, 0, str(e))
+    log("dim_person", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -162,7 +170,7 @@ try:
 
     check_and_write(df, "dim_vehicle", rows_in, ["vehicle_id"])
 except Exception as e:
-    log("dim_vehicle", "FAIL", 0, 0, str(e))
+    log("dim_vehicle", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -184,7 +192,7 @@ try:
 
     check_and_write(df, "dim_policy", rows_in, ["policy_id"])
 except Exception as e:
-    log("dim_policy", "FAIL", 0, 0, str(e))
+    log("dim_policy", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -206,7 +214,7 @@ try:
 
     check_and_write(df, "dim_coverage", rows_in, ["coverage_id"])
 except Exception as e:
-    log("dim_coverage", "FAIL", 0, 0, str(e))
+    log("dim_coverage", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -230,7 +238,7 @@ try:
 
     check_and_write(df, "dim_occurrence", rows_in, ["occurrence_id"])
 except Exception as e:
-    log("dim_occurrence", "FAIL", 0, 0, str(e))
+    log("dim_occurrence", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -252,7 +260,7 @@ try:
 
     check_and_write(df, "dim_peril_code", rows_in, ["peril_code"])
 except Exception as e:
-    log("dim_peril_code", "FAIL", 0, 0, str(e))
+    log("dim_peril_code", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
@@ -322,7 +330,7 @@ try:
 
     check_and_write(df, "fact_claim", rows_in, ["claim_id"])
 except Exception as e:
-    log("fact_claim", "FAIL", 0, 0, str(e))
+    log("fact_claim", "FAIL", 0, 0, short_error(e))
 
 
 # ============================================================
